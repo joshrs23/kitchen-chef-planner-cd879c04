@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ignorar archivos de entorno
+.env
+
+# Ignorar dependencias de Node.js
+node_modules/
