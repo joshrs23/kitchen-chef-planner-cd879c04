@@ -420,7 +420,7 @@ export default function Orders() {
       if (error) throw error;
       const uniqueNames = [...new Set((data || []).map(r => r.name))];
       setRecipeNames(uniqueNames);
-    } catch (error) {
+    } catch {
       // silencioso
     }
   };
@@ -496,11 +496,23 @@ export default function Orders() {
 
   const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
+  // ====== FIX rango: ajustar automáticamente ======
+  const handleFromChange = (v: string) => {
+    setFromDate(v);
+    if (toDate && v > toDate) setToDate(v); // si queda inválido, corrige To
+  };
+
+  const handleToChange = (v: string) => {
+    setToDate(v);
+    if (fromDate && v < fromDate) setFromDate(v); // si queda inválido, corrige From
+  };
+  // ===============================================
+
   // fix: aplicar filtro
   const applyFilter = () => {
+    // defensa adicional (normalmente ya estará corregido por los handlers)
     if (fromDate && toDate && fromDate > toDate) {
-      toast({ title: 'Invalid range', description: '"From" must be <= "To".', variant: 'destructive' });
-      return;
+      setToDate(fromDate);
     }
     fetchOrders(fromDate, toDate);
   };
@@ -601,7 +613,7 @@ export default function Orders() {
         </Dialog>
       </div>
 
-      {/* fix: bloque de filtro por fecha (default hoy→hoy) */}
+      {/* Filtro por fecha (default hoy→hoy) */}
       <Card>
         <CardHeader>
           <h2 className="text-lg font-semibold">Date Range Filter</h2>
@@ -610,11 +622,11 @@ export default function Orders() {
           <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] items-end gap-4">
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <Input type="date" value={fromDate} onChange={(e) => handleFromChange(e.target.value)} /> {/* fix */}
             </div>
             <div className="space-y-2">
               <Label>To</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <Input type="date" value={toDate} onChange={(e) => handleToChange(e.target.value)} /> {/* fix */}
             </div>
             <Button className="md:mb-0" onClick={applyFilter}>Apply Filter</Button>
             <Button variant="outline" className="gap-2" onClick={exportCsv}>
