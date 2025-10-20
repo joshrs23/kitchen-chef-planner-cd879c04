@@ -403,6 +403,9 @@ type GroupedRecipe = {
   lines: RecipeLine[];
 };
 
+// fix: unidades disponibles para el Select
+const UNITS = ['g', 'ml', 'units', 'L', 'box', 'kg', 'tbsp', 'tsp'] as const;
+
 export default function Recipes() {
   const [allLines, setAllLines] = useState<RecipeLine[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -492,7 +495,7 @@ export default function Recipes() {
     setEditOpen(true);
   };
 
-  // fix: agregar línea en modal
+  // fix: agregar línea en modal (unit por defecto "g")
   const addLine = () => {
     if (!ingredients.length) return;
     const firstIng = ingredients[0];
@@ -503,7 +506,7 @@ export default function Recipes() {
         recipe_type_id: editRecipeTypeId,
         ingredient_id: firstIng.id,
         quantity_base: 0,
-        unit: '',
+        unit: 'g', // fix: default
         ingredient_name: firstIng.name
       }
     ]);
@@ -523,8 +526,8 @@ export default function Recipes() {
     });
   };
 
-  // fix: guardar cambios (insert/update/delete en tabla recipes)
-  /*const saveRecipe = async () => {
+  // reemplaza TODO el saveRecipe por esto
+  const saveRecipe = async () => {
     try {
       // validar
       if (!editRecipeName.trim()) {
@@ -536,14 +539,26 @@ export default function Recipes() {
         return;
       }
 
-      // mapear líneas listas
-      const prepared = editLines.map(l => ({
-        id: l.id,
+      // fix: normaliza cantidad (soporta "2,5") y prepara objeto limpio
+      const normalizeQty = (q: any) => {
+        if (typeof q === 'string') q = q.replace(',', '.');
+        const n = Number(q);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      const sanitize = (l: any) => ({
+        // ¡no incluir id en inserts!
         name: editRecipeName.trim(),
-        recipe_type_id: editRecipeTypeId,
+        recipe_type_id: editRecipeTypeId ?? null,
         ingredient_id: l.ingredient_id,
-        quantity_base: Number(l.quantity_base),
-        unit: l.unit.trim()
+        quantity_base: normalizeQty(l.quantity_base),
+        unit: (l.unit ?? '').trim()
+      });
+
+      // mapear líneas
+      const prepared = editLines.map(l => ({
+        id: l.id, // sólo para updates/deletes
+        ...sanitize(l)
       }));
 
       const currentIds = prepared.filter(p => p.id != null).map(p => p.id!);
@@ -558,14 +573,15 @@ export default function Recipes() {
       // UPDATE los que tienen id
       const updates = prepared.filter(p => p.id != null);
       for (const row of updates) {
-        const { id, ...payload } = row as any;
-        const { error } = await supabase.from('recipes').update(payload).eq('id', id);
+        const { id, ...payload } = row; // fix: quitar id del payload
+        const { error } = await supabase.from('recipes').update(payload).eq('id', id as number);
         if (error) throw error;
       }
 
       // INSERT los nuevos sin id
-      const inserts = prepared.filter(p => p.id == null);
-      if (inserts.length) {
+      const insertsRaw = prepared.filter(p => p.id == null);
+      if (insertsRaw.length) {
+        const inserts = insertsRaw.map(({ id, ...rest }) => rest); // fix: eliminar id explícitamente
         const { error: insErr } = await supabase.from('recipes').insert(inserts);
         if (insErr) throw insErr;
       }
@@ -576,76 +592,7 @@ export default function Recipes() {
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
-  };*/
-
-  // reemplaza TODO el saveRecipe por esto
-const saveRecipe = async () => {
-  try {
-    // validar
-    if (!editRecipeName.trim()) {
-      toast({ title: 'Name required', description: 'Recipe name cannot be empty', variant: 'destructive' });
-      return;
-    }
-    if (editLines.length === 0) {
-      toast({ title: 'No lines', description: 'Add at least one ingredient line', variant: 'destructive' });
-      return;
-    }
-
-    // fix: normaliza cantidad (soporta "2,5") y prepara objeto limpio
-    const normalizeQty = (q: any) => {
-      if (typeof q === 'string') q = q.replace(',', '.');
-      const n = Number(q);
-      return Number.isFinite(n) ? n : 0;
-    };
-
-    const sanitize = (l: any) => ({
-      // ¡no incluir id en inserts!
-      name: editRecipeName.trim(),
-      recipe_type_id: editRecipeTypeId ?? null,
-      ingredient_id: l.ingredient_id,
-      quantity_base: normalizeQty(l.quantity_base),
-      unit: (l.unit ?? '').trim()
-    });
-
-    // mapear líneas originales
-    const prepared = editLines.map(l => ({
-      id: l.id, // sólo para updates/deletes
-      ...sanitize(l)
-    }));
-
-    const currentIds = prepared.filter(p => p.id != null).map(p => p.id!);
-    const toDelete = originalIds.filter(id => !currentIds.includes(id));
-
-    // DELETE los que ya no están
-    if (toDelete.length) {
-      const { error: delErr } = await supabase.from('recipes').delete().in('id', toDelete);
-      if (delErr) throw delErr;
-    }
-
-    // UPDATE los que tienen id
-    const updates = prepared.filter(p => p.id != null);
-    for (const row of updates) {
-      const { id, ...payload } = row; // fix: quitar id del payload
-      const { error } = await supabase.from('recipes').update(payload).eq('id', id as number);
-      if (error) throw error;
-    }
-
-    // INSERT los nuevos sin id
-    const insertsRaw = prepared.filter(p => p.id == null);
-    if (insertsRaw.length) {
-      const inserts = insertsRaw.map(({ id, ...rest }) => rest); // fix: eliminar id explícitamente
-      const { error: insErr } = await supabase.from('recipes').insert(inserts);
-      if (insErr) throw insErr;
-    }
-
-    toast({ title: 'Saved', description: 'Recipe updated successfully.' });
-    setEditOpen(false);
-    await fetchLines();
-  } catch (err: any) {
-    toast({ title: 'Error', description: err.message, variant: 'destructive' });
-  }
-};
-
+  };
 
   // fix: eliminar receta completa (todas sus líneas)
   const deleteRecipe = async (recipe: GroupedRecipe) => {
@@ -742,13 +689,13 @@ const saveRecipe = async () => {
 
       {/* fix: modal de edición de receta (header fijo, cuerpo con scroll, footer fijo) */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-3xl md:max-h-[85vh] flex flex-col"> {/* fix: modal como columna */}
-          <DialogHeader className="shrink-0"> {/* fix: header fijo */}
+        <DialogContent className="max-w-3xl md:max-h-[85vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Edit Recipe</DialogTitle>
             <DialogDescription>Change recipe info and manage its ingredient lines.</DialogDescription>
           </DialogHeader>
 
-          {/* fix: cuerpo crece y scrollea */}
+          {/* cuerpo scrolleable */}
           <div className="flex-1 overflow-y-auto pr-2 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -757,7 +704,6 @@ const saveRecipe = async () => {
                   value={editRecipeName}
                   onChange={(e) => {
                     setEditRecipeName(e.target.value);
-                    // reflejar en líneas nuevas
                     setEditLines(prev => prev.map(l => ({ ...l, name: e.target.value })));
                   }}
                   placeholder="e.g., Caesar Dressing"
@@ -831,6 +777,7 @@ const saveRecipe = async () => {
                             </SelectContent>
                           </Select>
                         </TableCell>
+
                         <TableCell>
                           <Input
                             type="number"
@@ -839,13 +786,24 @@ const saveRecipe = async () => {
                             onChange={(e) => updateLine(idx, { quantity_base: Number(e.target.value) })}
                           />
                         </TableCell>
+
+                        {/* fix: Unit como Select */}
                         <TableCell>
-                          <Input
-                            value={line.unit}
-                            onChange={(e) => updateLine(idx, { unit: e.target.value })}
-                            placeholder="g, ml, units"
-                          />
+                          <Select
+                            value={line.unit || ''}
+                            onValueChange={(val) => updateLine(idx, { unit: val })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {UNITS.map(u => (
+                                <SelectItem key={u} value={u}>{u}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
+
                         <TableCell className="text-right">
                           <Button variant="destructive" size="sm" onClick={() => removeLine(idx)}>
                             <Trash2 className="h-4 w-4" />
@@ -859,7 +817,7 @@ const saveRecipe = async () => {
             </div>
           </div>
 
-          {/* fix: footer fijo abajo, fuera del área scrolleable */}
+          {/* footer fijo */}
           <DialogFooter className="shrink-0 bg-background pt-4 border-t">
             <Button variant="ghost" onClick={() => setEditOpen(false)}>
               <X className="h-4 w-4 mr-2" /> Close
