@@ -310,7 +310,7 @@
 //   );
 // }
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -332,10 +332,9 @@ interface OrderItem {
   created_by: string | null;
 }
 
-// fix: zona horaria Montreal
+// ===== Helpers TZ (Montreal)
 const TZ = 'America/Toronto';
 
-// fix: YYYY-MM-DD en Montreal
 function dateStringInTZ(d: Date, tz = TZ) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
@@ -345,7 +344,7 @@ function dateStringInTZ(d: Date, tz = TZ) {
   }).format(d);
 }
 
-// fix: weekday correcto (usa 12:00 UTC para evitar “rollback” de día)
+// weekday correcto (12:00 UTC para evitar rollback)
 function weekdayFromDateString(dateStr: string, tz = TZ) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12));
@@ -353,7 +352,7 @@ function weekdayFromDateString(dateStr: string, tz = TZ) {
   return wd.toLowerCase();
 }
 
-// fix: mostrar fecha en Montreal sin desfase
+// mostrar fecha con TZ sin desfase
 function formatDateForTZ(dateStr: string, tz = TZ) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12));
@@ -365,6 +364,20 @@ function formatDateForTZ(dateStr: string, tz = TZ) {
   }).format(dt);
 }
 
+// Título tipo “Saturday, October 25, 2025”
+function headingForDate(dateStr: string, tz = TZ) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12));
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(dt);
+}
+// ===================================
+
 export default function Orders() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [recipeNames, setRecipeNames] = useState<string[]>([]);
@@ -373,12 +386,12 @@ export default function Orders() {
   const [editingOrder, setEditingOrder] = useState<OrderItem | null>(null);
   const [formData, setFormData] = useState({
     day_name: 'monday',
-    order_date: dateStringInTZ(new Date()), // fix: hoy en Montreal
-    prep_date: dateStringInTZ(new Date()), // preparation date
+    order_date: dateStringInTZ(new Date()),
+    prep_date: dateStringInTZ(new Date()),
     recipe_name: '',
     quantity: '1',
   });
-  // fix: filtro rango (default hoy→hoy)
+  // filtro rango (default hoy→hoy)
   const [fromDate, setFromDate] = useState<string>(dateStringInTZ(new Date()));
   const [toDate, setToDate] = useState<string>(dateStringInTZ(new Date()));
 
@@ -397,7 +410,7 @@ export default function Orders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // fix: trae pedidos por rango (usa prep_date)
+  // trae pedidos por rango (usa prep_date)
   const fetchOrders = async (from?: string, to?: string) => {
     try {
       setLoading(true);
@@ -462,7 +475,7 @@ export default function Orders() {
 
       setDialogOpen(false);
       resetForm();
-      fetchOrders(fromDate, toDate); // fix: respeta el filtro activo
+      fetchOrders(fromDate, toDate); // respeta filtro activo
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
@@ -474,7 +487,7 @@ export default function Orders() {
       const { error } = await supabase.from('order_items').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'Success', description: 'Order deleted successfully.' });
-      fetchOrders(fromDate, toDate); // fix
+      fetchOrders(fromDate, toDate);
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
@@ -494,12 +507,13 @@ export default function Orders() {
 
   const openDialog = (order?: OrderItem) => {
     if (order) {
-      const day = weekdayFromDateString(order.prep_date);
+      const keyDate = order.prep_date || order.order_date;
+      const day = weekdayFromDateString(keyDate);
       setEditingOrder(order);
       setFormData({
         day_name: day,
         order_date: order.order_date,
-        prep_date: order.prep_date || order.order_date, // default to order_date if null
+        prep_date: order.prep_date || order.order_date,
         recipe_name: order.recipe_name,
         quantity: order.quantity.toString(),
       });
@@ -511,37 +525,38 @@ export default function Orders() {
 
   const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
-  // ====== FIX rango: ajustar automáticamente ======
+  // ====== rango: ajustar automáticamente
   const handleFromChange = (v: string) => {
     setFromDate(v);
-    if (toDate && v > toDate) setToDate(v); // si queda inválido, corrige To
+    if (toDate && v > toDate) setToDate(v);
   };
-
   const handleToChange = (v: string) => {
     setToDate(v);
-    if (fromDate && v < fromDate) setFromDate(v); // si queda inválido, corrige From
+    if (fromDate && v < fromDate) setFromDate(v);
   };
-  // ===============================================
 
-  // fix: aplicar filtro
+  // aplicar filtro
   const applyFilter = () => {
-    // defensa adicional (normalmente ya estará corregido por los handlers)
     if (fromDate && toDate && fromDate > toDate) {
       setToDate(fromDate);
     }
     fetchOrders(fromDate, toDate);
   };
 
-  // fix: export CSV de lo filtrado
+  // export CSV (usa prep_date)
   const exportCsv = () => {
     const rows = [
-      ['Date', 'Day', 'Recipe', 'Quantity'],
-      ...orders.map(o => [
-        o.prep_date,
-        weekdayFromDateString(o.prep_date),
-        o.recipe_name,
-        String(o.quantity),
-      ]),
+      ['Preparation Date', 'Day', 'Recipe', 'Quantity', 'Order Date'],
+      ...orders.map(o => {
+        const keyDate = o.prep_date || o.order_date;
+        return [
+          keyDate,
+          weekdayFromDateString(keyDate),
+          o.recipe_name,
+          String(o.quantity),
+          o.order_date,
+        ];
+      }),
     ];
     const csv = rows.map(r => r.map(f => `"${String(f).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -552,6 +567,22 @@ export default function Orders() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  // ====== Agrupación por día (como summary.tsx) ======
+  const groupedByDate = useMemo(() => {
+    const acc: Record<string, OrderItem[]> = {};
+    for (const o of orders) {
+      const keyDate = o.prep_date || o.order_date; // siempre agrupamos por prep_date (fallback a order_date)
+      if (!acc[keyDate]) acc[keyDate] = [];
+      acc[keyDate].push(o);
+    }
+    return acc;
+  }, [orders]);
+
+  // ordenar las fechas desc (coincide con query.order desc)
+  const sortedDates = useMemo(() => {
+    return Object.keys(groupedByDate).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  }, [groupedByDate]);
 
   return (
     <div className="space-y-6">
@@ -638,7 +669,7 @@ export default function Orders() {
         </Dialog>
       </div>
 
-      {/* Filtro por fecha (default hoy→hoy) */}
+      {/* Filtro por fecha (prep_date) */}
       <Card>
         <CardHeader>
           <h2 className="text-lg font-semibold">Date Range Filter</h2>
@@ -647,11 +678,11 @@ export default function Orders() {
           <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] items-end gap-4">
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" value={fromDate} onChange={(e) => handleFromChange(e.target.value)} /> {/* fix */}
+              <Input type="date" value={fromDate} onChange={(e) => handleFromChange(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>To</Label>
-              <Input type="date" value={toDate} onChange={(e) => handleToChange(e.target.value)} /> {/* fix */}
+              <Input type="date" value={toDate} onChange={(e) => handleToChange(e.target.value)} />
             </div>
             <Button className="md:mb-0" onClick={applyFilter}>Apply Filter</Button>
             <Button variant="outline" className="gap-2" onClick={exportCsv}>
@@ -661,56 +692,64 @@ export default function Orders() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-lg font-semibold">Scheduled Orders</h2>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Day</TableHead>
-                  <TableHead>Recipe</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      No orders found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  orders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell>{formatDateForTZ(order.prep_date)}</TableCell>
-                      <TableCell className="capitalize">{weekdayFromDateString(order.prep_date)}</TableCell>
-                      <TableCell className="font-medium">{order.recipe_name}</TableCell>
-                      <TableCell>{order.quantity}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openDialog(order)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDelete(order.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {/* Listado agrupado por día (como summary.tsx) */}
+      {loading ? (
+        <div className="text-center py-8 text-muted-foreground">Loading...</div>
+      ) : sortedDates.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-12 text-muted-foreground">
+            No orders found
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {sortedDates.map((dateKey) => {
+            const items = groupedByDate[dateKey];
+            return (
+              <Card key={dateKey}>
+                <CardHeader>
+                  {/* Encabezado con fecha bonita (incluye weekday) */}
+                  <h3 className="text-lg font-semibold">{headingForDate(dateKey)}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Prep date: {formatDateForTZ(dateKey)} {/* muestra YYYY-MM-DD local */}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Recipe</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Order Date</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-medium">{order.recipe_name}</TableCell>
+                          <TableCell>{order.quantity}</TableCell>
+                          <TableCell>{formatDateForTZ(order.order_date)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="outline" size="sm" onClick={() => openDialog(order)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleDelete(order.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
