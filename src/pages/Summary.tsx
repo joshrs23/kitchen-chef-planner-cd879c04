@@ -241,6 +241,16 @@ function headingForDate(dateStr: string): string {
     day: 'numeric',
   }).format(dt);
 }
+
+// Muestra enteros sin decimales y decimales sin ceros de más (hasta 3)
+// Usa coma como separador decimal (ej. 3 → "3", 3.98 → "3,98")
+function formatQty(n: number) {
+  return new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(n);
+}
+
 /* ------------------------------------------------------------- */
 
 export default function Summary() {
@@ -388,7 +398,7 @@ export default function Summary() {
                     {items.map((row, idx) => (
                       <TableRow key={`${row.ingredient}-${idx}`}>
                         <TableCell className="font-medium">{row.ingredient}</TableCell>
-                        <TableCell>{Number(row.total_quantity).toFixed(3)}</TableCell>
+                        <TableCell>{formatQty(row.total_quantity)}</TableCell>
                         <TableCell>{row.unit}</TableCell>
                       </TableRow>
                     ))}
