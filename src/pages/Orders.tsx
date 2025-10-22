@@ -326,6 +326,7 @@ interface OrderItem {
   id: number;
   day_name: string;
   order_date: string; // YYYY-MM-DD
+  prep_date: string | null; // YYYY-MM-DD
   recipe_name: string;
   quantity: number;
   created_by: string | null;
@@ -373,6 +374,7 @@ export default function Orders() {
   const [formData, setFormData] = useState({
     day_name: 'monday',
     order_date: dateStringInTZ(new Date()), // fix: hoy en Montreal
+    prep_date: dateStringInTZ(new Date()), // preparation date
     recipe_name: '',
     quantity: '1',
   });
@@ -395,14 +397,14 @@ export default function Orders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // fix: trae pedidos por rango
+  // fix: trae pedidos por rango (usa prep_date)
   const fetchOrders = async (from?: string, to?: string) => {
     try {
       setLoading(true);
       let query = supabase.from('order_items').select('*');
 
-      if (from) query = query.gte('order_date', from);
-      if (to) query = query.lte('order_date', to);
+      if (from) query = query.gte('prep_date', from);
+      if (to) query = query.lte('prep_date', to);
 
       const { data, error } = await query.order('order_date', { ascending: false });
       if (error) throw error;
@@ -428,11 +430,22 @@ export default function Orders() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validar: Order Date <= Preparation Date
+    if (formData.order_date > formData.prep_date) {
+      toast({
+        title: 'Validation Error',
+        description: 'Order Date must be less than or equal to Preparation Date.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const day = weekdayFromDateString(formData.order_date);
       const payload = {
         day_name: day,
         order_date: formData.order_date,
+        prep_date: formData.prep_date,
         recipe_name: formData.recipe_name,
         quantity: Number(formData.quantity),
       };
@@ -472,6 +485,7 @@ export default function Orders() {
     setFormData({
       day_name: weekdayFromDateString(today),
       order_date: today,
+      prep_date: today,
       recipe_name: '',
       quantity: '1',
     });
@@ -485,6 +499,7 @@ export default function Orders() {
       setFormData({
         day_name: day,
         order_date: order.order_date,
+        prep_date: order.prep_date || order.order_date, // default to order_date if null
         recipe_name: order.recipe_name,
         quantity: order.quantity.toString(),
       });
@@ -561,7 +576,7 @@ export default function Orders() {
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="order_date">Date</Label>
+                    <Label htmlFor="order_date">Order Date</Label>
                     <Input
                       id="order_date"
                       type="date"
@@ -571,9 +586,19 @@ export default function Orders() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Day</Label>
-                    <Input value={cap(formData.day_name)} readOnly />
+                    <Label htmlFor="prep_date">Preparation Date</Label>
+                    <Input
+                      id="prep_date"
+                      type="date"
+                      value={formData.prep_date}
+                      onChange={(e) => setFormData({ ...formData, prep_date: e.target.value })}
+                      required
+                    />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Day</Label>
+                  <Input value={cap(formData.day_name)} readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="recipe_name">Recipe</Label>

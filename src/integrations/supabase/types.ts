@@ -39,6 +39,7 @@ export type Database = {
           day_name: string
           id: number
           order_date: string
+          prep_date: string | null
           quantity: number
           recipe_name: string
         }
@@ -48,6 +49,7 @@ export type Database = {
           day_name: string
           id?: number
           order_date: string
+          prep_date?: string | null
           quantity?: number
           recipe_name: string
         }
@@ -57,6 +59,7 @@ export type Database = {
           day_name?: string
           id?: number
           order_date?: string
+          prep_date?: string | null
           quantity?: number
           recipe_name?: string
         }
