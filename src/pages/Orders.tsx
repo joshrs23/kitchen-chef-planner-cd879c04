@@ -384,13 +384,13 @@ export default function Orders() {
 
   const { toast } = useToast();
 
-  // sync day_name con order_date
+  // sync day_name con prep_date
   useEffect(() => {
-    const computed = weekdayFromDateString(formData.order_date);
+    const computed = weekdayFromDateString(formData.prep_date);
     if (computed !== formData.day_name) {
       setFormData((f) => ({ ...f, day_name: computed }));
     }
-  }, [formData.order_date]);
+  }, [formData.prep_date]);
 
   useEffect(() => {
     Promise.all([fetchOrders(fromDate, toDate), fetchRecipeNames()]);
@@ -406,7 +406,7 @@ export default function Orders() {
       if (from) query = query.gte('prep_date', from);
       if (to) query = query.lte('prep_date', to);
 
-      const { data, error } = await query.order('order_date', { ascending: false });
+      const { data, error } = await query.order('prep_date', { ascending: false });
       if (error) throw error;
       setOrders(data || []);
     } catch (error: any) {
@@ -441,7 +441,7 @@ export default function Orders() {
     }
 
     try {
-      const day = weekdayFromDateString(formData.order_date);
+      const day = weekdayFromDateString(formData.prep_date);
       const payload = {
         day_name: day,
         order_date: formData.order_date,
@@ -494,7 +494,7 @@ export default function Orders() {
 
   const openDialog = (order?: OrderItem) => {
     if (order) {
-      const day = weekdayFromDateString(order.order_date);
+      const day = weekdayFromDateString(order.prep_date);
       setEditingOrder(order);
       setFormData({
         day_name: day,
@@ -537,8 +537,8 @@ export default function Orders() {
     const rows = [
       ['Date', 'Day', 'Recipe', 'Quantity'],
       ...orders.map(o => [
-        o.order_date,
-        weekdayFromDateString(o.order_date),
+        o.prep_date,
+        weekdayFromDateString(o.prep_date),
         o.recipe_name,
         String(o.quantity),
       ]),
@@ -689,8 +689,8 @@ export default function Orders() {
                 ) : (
                   orders.map((order) => (
                     <TableRow key={order.id}>
-                      <TableCell>{formatDateForTZ(order.order_date)}</TableCell>
-                      <TableCell className="capitalize">{weekdayFromDateString(order.order_date)}</TableCell>
+                      <TableCell>{formatDateForTZ(order.prep_date)}</TableCell>
+                      <TableCell className="capitalize">{weekdayFromDateString(order.prep_date)}</TableCell>
                       <TableCell className="font-medium">{order.recipe_name}</TableCell>
                       <TableCell>{order.quantity}</TableCell>
                       <TableCell className="text-right">
