@@ -271,7 +271,7 @@ export default function Summary() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('v_daily_ingredient_summary')
+        .from('v_order_daily_ingredient_summary')
         .select('*')
         .gte('order_date', dateFrom)
         .lte('order_date', dateTo)

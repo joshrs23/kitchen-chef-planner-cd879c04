@@ -175,7 +175,7 @@ export type Database = {
       }
     }
     Views: {
-      v_daily_ingredient_summary: {
+      v_order_daily_ingredient_summary: {
         Row: {
           day_name: string | null
           ingredient: string | null
